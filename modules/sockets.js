@@ -89,6 +89,8 @@ module.exports = (server) => {
         })
 
         socket.on("acceptRequest", (roomId, username, character, equipment) => {
+            if (!equipment.weapon) return socket.emit("noWeapon", "You must wield a weapon into the fight. Go to inventory and equip one.")
+
             const playerObject = {
                 username,
                 inventory: equipment,
@@ -109,14 +111,22 @@ module.exports = (server) => {
 
         socket.on("usedPotion", (username, roomId, battleData) => {
             if (username === battleData.player1.username) {
+                if (!battleData.player1.hasPotion) {
+                    return socket.emit("noWeapon", "You don't have a potion")
+                }
                 battleData.player1.health += battleData.player1.inventory.potion.healing
                 if (battleData.player1.health > 100) battleData.player1.health = 100
                 battleData.player1.hasPotion = false
+                battleData.player1.inventory.potion = null
                 battleData.turn = battleData.player2.username
             } else {
+                if (!battleData.player2.hasPotion) {
+                    return socket.emit("noWeapon", "You don't have a potion")
+                }
                 battleData.player2.health += battleData.player2.inventory.potion.healing
                 if (battleData.player2.health > 100) battleData.player2.health = 100
                 battleData.player2.hasPotion = false
+                battleData.player2.inventory.potion = null
                 battleData.turn = battleData.player1.username
             }
             io.to(roomId).emit("getResult", battleData)
@@ -136,9 +146,9 @@ module.exports = (server) => {
             let lifeSteal = 0
 
             if (username === player1username) {
-                if (player2armor) const player2armorValue = (Math.floor(Math.random() * (player2armor.maxArmor - player2armor.minArmor + 1)) + player2armor.minArmor) / 100
-
+                let player2armorValue = 0
                 let player2DodgeChance = 0
+
                 for (let i = 0; i < player2weapon.effects.length; i++) {
                     if (player2weapon.effects[i].effectName === "dodge") {
                         const chance = Math.floor(Math.random() * 100)
@@ -149,6 +159,8 @@ module.exports = (server) => {
                 }
 
                 if (player2armor) {
+                    player2armorValue = (Math.floor(Math.random() * (player2armor.maxArmor - player2armor.minArmor + 1)) + player2armor.minArmor) / 100
+
                     for (let i = 0; i < player2armor.effects.length; i++) {
                         if (player2armor.effects[i].effectName === "dodge") {
                             const chance = Math.floor(Math.random() * 100)
@@ -158,6 +170,7 @@ module.exports = (server) => {
                         }
                     }
                 }
+
 
                 let weaponDamage = Math.floor(Math.random() * (player1weapon.maxDamage - player1weapon.minDamage + 1)) + player1weapon.minDamage
                 damage += weaponDamage
@@ -215,9 +228,11 @@ module.exports = (server) => {
                     damage = 0
                 }
 
-                console.log("Player1" ,damage * player2armorValue)
-
-                battleData.player2.health -= Math.floor(damage * player2armorValue)
+                if (player2armorValue !== 0) {
+                    battleData.player2.health -= Math.round(damage - (damage * player2armorValue))
+                } else {
+                    battleData.player2.health -= damage
+                }
 
                 battleData.turn = player2username
 
@@ -293,9 +308,11 @@ module.exports = (server) => {
                     damage = 0
                 }
 
-                console.log("Player2" ,damage * player1armorValue)
-
-                battleData.player1.health -= Math.floor(damage * player1armorValue)
+                if (player1armorValue !== 0) {
+                    battleData.player1.health -= Math.round(damage - (damage * player1armorValue))
+                } else {
+                    battleData.player1.health -= damage
+                }
 
                 battleData.turn = player1username
             }
