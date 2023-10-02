@@ -27,8 +27,8 @@ const maxDamageGenerator = (grade) => {
 }
 
 const slotsGenerator = (grade) => {
-    if (grade === "A") return randomNumber(3)
-    if (grade === "B") return randomNumber(1)
+    if (grade === "A") return randomNumber(3) + 1
+    if (grade === "B") return randomNumber(1) + 1
     return 0
 }
 
