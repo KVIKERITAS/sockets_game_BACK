@@ -9,6 +9,8 @@ const potionGenerator = require("../modules/potionGenerator")
 let onlineUsers = []
 let battleRooms = []
 
+let player1DodgeChance = 0
+
 module.exports = (server) => {
 
     const io = new Server(server, {
@@ -20,7 +22,14 @@ module.exports = (server) => {
     io.on("connection", (socket) => {
 
         socket.on("userConnected", async (username) => {
-            const user = await userDb.findOne({username}, {password: 0, _id: 0, tokens: 0, experience: 0, inventory: 0})
+            const user = await userDb.findOne({username}, {
+                password: 0,
+                _id: 0,
+                tokens: 0,
+                experience: 0,
+                inventory: 0
+            })
+
             onlineUsers.push({
                 id: socket.id,
                 user
@@ -98,66 +107,105 @@ module.exports = (server) => {
             io.to(roomId).emit("battleStart", battleRooms[roomIndex])
         })
 
+        socket.on("usedPotion", (username, roomId, battleData) => {
+            if (username === battleData.player1.username) {
+                battleData.player1.health += battleData.player1.inventory.potion.healing
+                if (battleData.player1.health > 100) battleData.player1.health = 100
+                battleData.player1.hasPotion = false
+                battleData.turn = battleData.player2.username
+            } else {
+                battleData.player2.health += battleData.player2.inventory.potion.healing
+                if (battleData.player2.health > 100) battleData.player2.health = 100
+                battleData.player2.hasPotion = false
+                battleData.turn = battleData.player1.username
+            }
+            io.to(roomId).emit("getResult", battleData)
+        })
+
         socket.on("usedAttack", (username, roomId, battleData) => {
+            const player1username = battleData.player1.username
+            const player1weapon = battleData.player1.inventory.weapon
+            const player1armor = battleData.player1.inventory.armor
+
+            const player2username = battleData.player2.username
+            const player2weapon = battleData.player2.inventory.weapon
+            const player2armor = battleData.player2.inventory.armor
 
             let damage = 0
             let critChance = 0
             let lifeSteal = 0
 
-            let player1DodgeChance = 0
-            let player2DodgeChance = 0
+            if (username === player1username) {
+                if (player2armor) const player2armorValue = (Math.floor(Math.random() * (player2armor.maxArmor - player2armor.minArmor + 1)) + player2armor.minArmor) / 100
 
-            if (username === battleData.player1.username) {
-                let weaponDamage = Math.floor(Math.random() * (battleData.player1.inventory.weapon.maxDamage - battleData.player1.inventory.weapon.minDamage + 1)) + battleData.player1.inventory.weapon.minDamage
+                let player2DodgeChance = 0
+                for (let i = 0; i < player2weapon.effects.length; i++) {
+                    if (player2weapon.effects[i].effectName === "dodge") {
+                        const chance = Math.floor(Math.random() * 100)
+                        if (chance <= player2weapon.effects[i].chance) {
+                            player2DodgeChance += player2weapon.effects[i].chance
+                        }
+                    }
+                }
+
+                if (player2armor) {
+                    for (let i = 0; i < player2armor.effects.length; i++) {
+                        if (player2armor.effects[i].effectName === "dodge") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player2armor.effects[i].chance) {
+                                player2DodgeChance += player2armor.effects[i].chance
+                            }
+                        }
+                    }
+                }
+
+                let weaponDamage = Math.floor(Math.random() * (player1weapon.maxDamage - player1weapon.minDamage + 1)) + player1weapon.minDamage
                 damage += weaponDamage
 
-                for (let i = 0; i < battleData.player1.inventory.weapon.effects.length; i++) {
-                    // can try using filter
+                if (player1weapon.effects) {
+                    for (let i = 0; i < player1weapon.effects.length; i++) {
 
-                    if (battleData.player1.inventory.weapon.effects[i].effectName === "critical") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player1.inventory.weapon.effects[i].chance) {
-                            critChance += battleData.player1.inventory.weapon.effects[i].chance
+                        if (player1weapon.effects[i].effectName === "critical") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player1weapon.effects[i].chance) {
+                                critChance += player1weapon.effects[i].chance
+                            }
                         }
-                    }
 
-                    if (battleData.player1.inventory.weapon.effects[i].effectName === "dodge") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player1.inventory.weapon.effects[i].chance) {
-                            player1DodgeChance += battleData.player1.inventory.weapon.effects[i].chance
-                        }
-                    }
-
-                    if (battleData.player1.inventory.weapon.effects[i].effectName === "lifeSteal") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player1.inventory.weapon.effects[i].chance) {
-                            lifeSteal += 1
+                        if (player1weapon.effects[i].effectName === "lifeSteal") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player1weapon.effects[i].chance) {
+                                lifeSteal += 1
+                            }
                         }
                     }
                 }
 
-                for (let i = 0; i < battleData.player1.inventory.armor.effects.length; i++) {
-                    if (battleData.player1.inventory.armor.effects[i].effectName === "critical") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player1.inventory.armor.effects[i].chance) {
-                            critChance += battleData.player1.inventory.armor.effects[i].chance
+                if (player1armor) {
+                    for (let i = 0; i < player1armor.effects.length; i++) {
+                        if (player1armor.effects[i].effectName === "critical") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player1armor.effects[i].chance) {
+                                critChance += player1armor.effects[i].chance
+                            }
                         }
-                    }
 
-                    if (battleData.player1.inventory.armor.effects[i].effectName === "dodge") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player1.inventory.armor.effects[i].chance) {
-                            player1DodgeChance += battleData.player1.inventory.armor.effects[i].chance
+                        if (player1armor.effects[i].effectName === "dodge") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player1armor.effects[i].chance) {
+                                player1DodgeChance += player1armor.effects[i].chance
+                            }
                         }
-                    }
 
-                    if (battleData.player1.inventory.armor.effects[i].effectName === "lifeSteal") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player1.inventory.armor.effects[i].chance && lifeSteal === 0) {
-                            lifeSteal += 1
+                        if (player1armor.effects.effectName === "lifeSteal") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player1armor.effects[i].chance) {
+                                lifeSteal += 1
+                            }
                         }
                     }
                 }
+
 
                 const applyCritChance = Math.floor(Math.random() * 100)
                 if (applyCritChance <= critChance) damage *= 2
@@ -165,59 +213,74 @@ module.exports = (server) => {
                 const dodgedChance = Math.floor(Math.random() * 100)
                 if (player2DodgeChance > 0 && player2DodgeChance <= dodgedChance) {
                     damage = 0
-                    player2DodgeChance = 0
-                    console.log("Player dodged", damage)
                 }
 
-                battleData.player2.health -= damage
-                battleData.turn = battleData.player2.username
+                console.log("Player1" ,damage * player2armorValue)
+
+                battleData.player2.health -= Math.floor(damage * player2armorValue)
+
+                battleData.turn = player2username
 
             } else {
-                let weaponDamage = Math.floor(Math.random() * (battleData.player2.inventory.weapon.maxDamage - battleData.player2.inventory.weapon.minDamage + 1)) + battleData.player2.inventory.weapon.minDamage
-                damage += weaponDamage
+                let player1armorValue = 0
+                let player1DodgeChance = 0
 
-                for (let i = 0; i < battleData.player2.inventory.weapon.effects.length; i++) {
-                    if (battleData.player2.inventory.weapon.effects[i].effectName === "critical") {
+                for (let i = 0; i < player1weapon.effects.length; i++) {
+                    if (player1weapon.effects[i].effectName === "dodge") {
                         const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player2.inventory.weapon.effects[i].chance) {
-                            critChance += battleData.player2.inventory.weapon.effects[i].chance
-                        }
-                    }
-
-                    if (battleData.player2.inventory.weapon.effects[i].effectName === "dodge") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player2.inventory.weapon.effects[i].chance) {
-                            player1DodgeChance += battleData.player2.inventory.weapon.effects[i].chance
-                        }
-                    }
-
-                    if (battleData.player2.inventory.weapon.effects[i].effectName === "lifeSteal") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player2.inventory.weapon.effects[i].chance) {
-                            lifeSteal += 1
+                        if (chance <= player1weapon.effects[i].chance) {
+                            player1DodgeChance += player1weapon.effects[i].chance
                         }
                     }
                 }
 
-                for (let i = 0; i < battleData.player2.inventory.armor.effects.length; i++) {
-                    if (battleData.player2.inventory.armor.effects[i].effectName === "critical") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player2.inventory.armor.effects[i].chance) {
-                            critChance += battleData.player2.inventory.armor.effects[i].chance
+                if (player1armor) {
+                    player1armorValue = (Math.floor(Math.random() * (player1armor.maxArmor - player1armor.minArmor + 1)) + player1armor.minArmor) / 100
+                    for (let i = 0; i < player1armor.effects.length; i++) {
+                        if (player1armor.effects[i].effectName === "dodge") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player1armor.effects[i].chance) {
+                                player1DodgeChance += player1armor.effects[i].chance
+                            }
                         }
                     }
+                }
 
-                    if (battleData.player2.inventory.armor.effects[i].effectName === "dodge") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player2.inventory.armor.effects[i].chance) {
-                            player1DodgeChance += battleData.player2.inventory.armor.effects[i].chance
+                let weaponDamage = Math.floor(Math.random() * (player2weapon.maxDamage - player2weapon.minDamage + 1)) + player2weapon.minDamage
+                damage += weaponDamage
+
+                if (player2weapon.effects) {
+                    for (let i = 0; i < player2weapon.effects.length; i++) {
+                        if (player2weapon.effects[i].effectName === "critical") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player2weapon.effects[i].chance) {
+                                critChance += player2weapon.effects[i].chance
+                            }
+                        }
+
+                        if (player2weapon.effects[i].effectName === "lifeSteal") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player2weapon.effects[i].chance) {
+                                lifeSteal += 1
+                            }
                         }
                     }
+                }
 
-                    if (battleData.player2.inventory.armor.effects[i].effectName === "lifeSteal") {
-                        const chance = Math.floor(Math.random() * 100)
-                        if (chance <= battleData.player2.inventory.armor.effects[i].chance && lifeSteal === 0) {
-                            lifeSteal += 1
+                if (player2armor) {
+                    for (let i = 0; i < player2armor.effects.length; i++) {
+                        if (player2armor.effects[i].effectName === "critical") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player2armor.effects[i].chance) {
+                                critChance += player2armor.effects[i].chance
+                            }
+                        }
+
+                        if (player2armor.effects[i].effectName === "lifeSteal") {
+                            const chance = Math.floor(Math.random() * 100)
+                            if (chance <= player2armor.effects[i].chance && lifeSteal === 0) {
+                                lifeSteal += 1
+                            }
                         }
                     }
                 }
@@ -228,15 +291,20 @@ module.exports = (server) => {
                 const dodgedChance = Math.floor(Math.random() * 100)
                 if (player1DodgeChance > 0 && player1DodgeChance <= dodgedChance) {
                     damage = 0
-                    player1DodgeChance = 0
                 }
 
-                battleData.player1.health -= damage
-                battleData.turn = battleData.player1.username
+                console.log("Player2" ,damage * player1armorValue)
+
+                battleData.player1.health -= Math.floor(damage * player1armorValue)
+
+                battleData.turn = player1username
             }
 
-
             io.to(roomId).emit("getResult", battleData)
+
+            if (battleData.player1.health <= 0 || battleData.player2.health <= 0) {
+                return io.to(roomId).emit("fightFinish", "Fight finished")
+            }
         })
     })
 }
