@@ -5,12 +5,10 @@ const {randomUUID} = new ShortUniqueId({length: 10});
 const weaponGenerator = require("../modules/weaponGenerator")
 const armorGenerator = require("../modules/armorGenerator")
 const potionGenerator = require("../modules/potionGenerator")
-const calculateDmage = require("../modules/calculateDamage")
+const calculateDamage = require("../modules/calculateDamage")
 
 let onlineUsers = []
 let battleRooms = []
-
-let player1DodgeChance = 0
 
 module.exports = (server) => {
 
@@ -144,9 +142,13 @@ module.exports = (server) => {
                 const defenderWeapon = battleData.player2.inventory.weapon
                 const defenderArmor = battleData.player2.inventory.armor
 
-                const damage = calculateDmage(attackerWeapon, attackerArmor, defenderUsername, defenderWeapon, defenderArmor)
+                const damage = calculateDamage(attackerWeapon, attackerArmor, defenderUsername, defenderWeapon, defenderArmor)
 
                 battleData.player2.health -= damage
+                if (battleData.player2.health <= 0) {
+                    socket.emit("battleWon", "Congratulations you won the battle")
+
+                }
                 battleData.turn = defenderUsername
             } else {
                 const attackerWeapon = battleData.player2.inventory.weapon
@@ -156,17 +158,21 @@ module.exports = (server) => {
                 const defenderWeapon = battleData.player1.inventory.weapon
                 const defenderArmor = battleData.player1.inventory.armor
 
-                const damage = calculateDmage(attackerWeapon, attackerArmor, defenderUsername, defenderWeapon, defenderArmor)
+                const damage = calculateDamage(attackerWeapon, attackerArmor, defenderUsername, defenderWeapon, defenderArmor)
 
                 battleData.player1.health -= damage
+                if (battleData.player1.health <= 0) {
+                    socket.emit("battleWon", "Congratulations you won the battle")
+
+                }
                 battleData.turn = defenderUsername
             }
 
             io.to(roomId).emit("getResult", battleData)
 
-            if (battleData.player1.health <= 0 || battleData.player2.health <= 0) {
-                return io.to(roomId).emit("fightFinish", "Fight finished")
-            }
+            // if (battleData.player1.health <= 0 || battleData.player2.health <= 0) {
+            //     return io.to(roomId).emit("fightFinish", "Fight finished")
+            // }
         })
     })
 }
