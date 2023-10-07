@@ -112,6 +112,19 @@ module.exports = (server) => {
             io.to(roomId).emit("battleStart", battleRooms[roomIndex])
         })
 
+        socket.on("timeOut", (roomId) => {
+            const roomIndex = battleRooms.findIndex(room => room.id === roomId)
+            let battleData = battleRooms[roomIndex]
+
+            if (battleData.turn === battleData.player1.username) {
+                battleData.turn = battleData.player2.username
+            } else {
+                battleData.turn = battleData.player1.username
+
+            }
+            io.to(roomId).emit("turnOver", battleData)
+        })
+
         socket.on("usedPotion", (roomId) => {
             const foundUser = onlineUsers.find(user => user.id === socket.id)
             const roomIndex = battleRooms.findIndex(room => room.id === roomId)
