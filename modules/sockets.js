@@ -68,7 +68,8 @@ module.exports = (server) => {
                 inventory: equipment,
                 health: 100,
                 character: senderCharacter,
-                hasPotion: false
+                hasPotion: false,
+                experienceGained: 0
             }
 
             if (equipment.potion) playerObject.hasPotion = true
@@ -95,21 +96,25 @@ module.exports = (server) => {
                 inventory: equipment,
                 health: 100,
                 character,
-                hasPotion: false
+                hasPotion: false,
+                experienceGained: 0
             }
 
             if (equipment.potion) playerObject.hasPotion = true
 
             const roomIndex = battleRooms.findIndex(room => room.id === roomId)
             battleRooms[roomIndex].player2 = playerObject
-
             socket.join(roomId)
 
             io.to(roomId).emit("battleStart", battleRooms[roomIndex])
         })
 
-        socket.on("usedPotion", (username, roomId, battleData) => {
-            if (username === battleData.player1.username) {
+        socket.on("usedPotion", (roomId) => {
+            const foundUser = onlineUsers.find(user => user.id === socket.id)
+            const roomIndex = battleRooms.findIndex(room => room.id === roomId)
+            let battleData = battleRooms[roomIndex]
+
+            if (foundUser.username === battleData.player1.username) {
                 if (!battleData.player1.hasPotion) {
                     return socket.emit("noWeapon", "You don't have a potion")
                 }
@@ -131,10 +136,13 @@ module.exports = (server) => {
             io.to(roomId).emit("getResult", battleData)
         })
 
-        socket.on("usedAttack", (username, roomId, battleData) => {
+        socket.on("usedAttack", async (roomId) => {
             const foundUser = onlineUsers.find(user => user.id === socket.id)
+            const roomIndex = battleRooms.findIndex(room => room.id === roomId)
+            let battleData = battleRooms[roomIndex]
 
             if (battleData.player1.username === foundUser.user.username) {
+                const attackerUsername = battleData.player1.username
                 const attackerWeapon = battleData.player1.inventory.weapon
                 const attackerArmor = battleData.player1.inventory.armor
 
@@ -145,12 +153,27 @@ module.exports = (server) => {
                 const damage = calculateDamage(attackerWeapon, attackerArmor, defenderUsername, defenderWeapon, defenderArmor)
 
                 battleData.player2.health -= damage
+                battleData.player1.experienceGained += Math.round(damage / 2)
                 if (battleData.player2.health <= 0) {
-                    socket.emit("battleWon", "Congratulations you won the battle")
-
+                    const wonUser = await userDb.findOne({username: attackerUsername})
+                    const currentXP = wonUser.experience + battleData.player1.experienceGained
+                    if (currentXP >= 100) {
+                        const updatedXp = currentXP - 100
+                        await userDb.findOneAndUpdate({username: attackerUsername}, {$inc: {tokens: +1}, $set: {experience: updatedXp}}, {new: true})
+                    } else {
+                        await userDb.findOneAndUpdate({username: attackerUsername}, {$set: {experience: currentXP}}, {new: true})
+                    }
+                    const userData = await userDb.find({username: attackerUsername}, {password: 0})
+                    socket.emit("battleWon", `Congratulations you won the battle. You were awarded ${battleData.player1.experienceGained}XP for the Victory.`, userData)
+                    const lostUser = onlineUsers.find(users => users.user.username === defenderUsername)
+                    socket.to(lostUser.id).emit("battleLost", "Unfortunately you lost the battle.")
+                    io.socketsLeave(roomId)
+                    battleRooms = battleRooms.filter(room => room.id !== roomId)
+                    return
                 }
                 battleData.turn = defenderUsername
             } else {
+                const attackerUsername = battleData.player2.username
                 const attackerWeapon = battleData.player2.inventory.weapon
                 const attackerArmor = battleData.player2.inventory.armor
 
@@ -161,18 +184,29 @@ module.exports = (server) => {
                 const damage = calculateDamage(attackerWeapon, attackerArmor, defenderUsername, defenderWeapon, defenderArmor)
 
                 battleData.player1.health -= damage
+                battleData.player2.experienceGained += Math.round(damage / 2)
                 if (battleData.player1.health <= 0) {
-                    socket.emit("battleWon", "Congratulations you won the battle")
-
+                    const wonUser = await userDb.findOne({username: attackerUsername})
+                    const currentXP = wonUser.experience + battleData.player2.experienceGained
+                    if (currentXP >= 100) {
+                        const updatedXp = currentXP - 100
+                        await userDb.findOneAndUpdate({username: attackerUsername}, {$inc: {tokens: +1}, $set: {experience: updatedXp}}, {new: true})
+                    } else {
+                        await userDb.findOneAndUpdate({username: attackerUsername}, {$set: {experience: currentXP}}, {new: true})
+                    }
+                    const userData = await userDb.find({username: attackerUsername}, {password: 0})
+                    socket.emit("battleWon", `Congratulations you won the battle. You were awarded ${battleData.player1.experienceGained}XP for the Victory.`, userData)
+                    const lostUser = onlineUsers.find(users => users.user.username === defenderUsername)
+                    socket.to(lostUser.id).emit("battleLost", "Unfortunately you lost the battle.")
+                    io.socketsLeave(roomId)
+                    battleRooms = battleRooms.filter(room => room.id !== roomId)
+                    return
                 }
                 battleData.turn = defenderUsername
             }
 
             io.to(roomId).emit("getResult", battleData)
 
-            // if (battleData.player1.health <= 0 || battleData.player2.health <= 0) {
-            //     return io.to(roomId).emit("fightFinish", "Fight finished")
-            // }
         })
     })
 }

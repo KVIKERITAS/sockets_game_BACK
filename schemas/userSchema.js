@@ -22,7 +22,7 @@ const userSchema = new Schema({
     tokens: {
         type: Number,
         required: false,
-        default: 99
+        default: 0
     },
     inventory: {
         type: [],
