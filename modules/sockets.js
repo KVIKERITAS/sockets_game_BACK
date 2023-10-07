@@ -114,7 +114,7 @@ module.exports = (server) => {
             const roomIndex = battleRooms.findIndex(room => room.id === roomId)
             let battleData = battleRooms[roomIndex]
 
-            if (foundUser.username === battleData.player1.username) {
+            if (foundUser.user.username === battleData.player1.username) {
                 if (!battleData.player1.hasPotion) {
                     return socket.emit("noWeapon", "You don't have a potion")
                 }
