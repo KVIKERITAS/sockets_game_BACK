@@ -21,6 +21,9 @@ module.exports = (server) => {
     io.on("connection", (socket) => {
 
         socket.on("userConnected", async (username) => {
+            const foundUser = onlineUsers.find(user => user.user.username === username)
+            if (foundUser) return socket.emit("userOnline", "User with this username is already online.")
+
             const user = await userDb.findOne({username}, {
                 password: 0,
                 _id: 0,
@@ -190,9 +193,14 @@ module.exports = (server) => {
                     const currentXP = wonUser.experience + battleData.player2.experienceGained
                     if (currentXP >= 100) {
                         const updatedXp = currentXP - 100
-                        await userDb.findOneAndUpdate({username: attackerUsername}, {$inc: {tokens: +1}, $set: {experience: updatedXp}}, {new: true})
+                        await userDb.findOneAndUpdate({username: attackerUsername}, {
+                            $inc: {tokens: +1},
+                            $set: {experience: updatedXp}},
+                            {new: true})
                     } else {
-                        await userDb.findOneAndUpdate({username: attackerUsername}, {$set: {experience: currentXP}}, {new: true})
+                        await userDb.findOneAndUpdate({username: attackerUsername}, {
+                            $set: {experience: currentXP}},
+                            {new: true})
                     }
                     const userData = await userDb.find({username: attackerUsername}, {password: 0})
                     socket.emit("battleWon", `Congratulations you won the battle. You were awarded ${battleData.player1.experienceGained}XP for the Victory.`, userData)
